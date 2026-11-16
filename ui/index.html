@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Проверка страниц — Autonet</title>
+    <title>Доступность страниц — Autonet</title>
     <style>
         * { box-sizing: border-box; }
         body {
@@ -70,8 +70,8 @@
 </head>
 <body>
 <div id="app" class="wrap">
-    <h1>Проверка страниц Autonet</h1>
-    <div class="muted">Playwright открывает страницы в headless-браузере и проверяет, что они отвечают 200 без ошибок JS.</div>
+    <h1>Доступность страниц Autonet</h1>
+    <div class="muted">Playwright открывает главную, собирает внутренние ссылки из панели .main-nav menu и проверяет, что страницы отвечают 200 без ошибок JS. Внешние ссылки не проверяются.</div>
 
     <div class="card">
         <div class="group">
@@ -82,18 +82,10 @@
             </label>
         </div>
 
-        <div class="group" style="margin-top: 16px">
-            <span class="group-title">Страницы</span>
-            <label v-for="page in pages" :key="page.path" class="option">
-                <input type="checkbox" :value="page.path" v-model="selected">
-                {{ page.label }} <span class="muted">{{ page.path }}</span>
-            </label>
-        </div>
-
         <div class="row" style="margin-top: 20px">
             <span class="muted" v-if="currentBase">{{ currentBase }}</span>
             <button :disabled="!canRun" @click="run">
-                {{ running ? 'Проверяем…' : 'Запустить проверку' }}
+                {{ running ? 'Проверяем…' : 'Проверить доступность' }}
             </button>
         </div>
     </div>
@@ -103,9 +95,11 @@
     <div v-if="result" class="card">
         <div class="summary">
             <span class="badge" :class="result.ok ? 'ok' : 'fail'">
-                {{ result.ok ? 'Все страницы в порядке' : 'Есть проблемы' }}
+                {{ result.ok ? 'Все страницы доступны' : 'Есть проблемы' }}
             </span>
             <span class="muted">{{ result.label }} · {{ result.baseUrl }}</span>
+            <span class="muted">Страниц: {{ result.results.length }}</span>
+            <span class="muted" v-if="result.skippedExternal.length">Внешних ссылок пропущено: {{ result.skippedExternal.length }}</span>
             <span class="muted">Длительность: {{ result.durationMs }} мс</span>
             <span class="muted">{{ formatDate(result.startedAt) }}</span>
         </div>
@@ -129,7 +123,7 @@
     </div>
 
     <div v-if="!result && !running" class="card empty">
-        Выберите окружение и страницы, затем нажмите «Запустить проверку».
+        Выберите окружение и нажмите «Проверить доступность» — ссылки берутся из меню сайта автоматически.
     </div>
 </div>
 <script type="module" src="/app.js"></script>

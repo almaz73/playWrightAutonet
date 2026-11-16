@@ -2,7 +2,7 @@ import http from 'node:http'
 import {readFile} from 'node:fs/promises'
 import path from 'node:path'
 import {fileURLToPath} from 'node:url'
-import {runSmoke, SMOKE_ENVIRONMENTS, SMOKE_PAGES} from './src/smoke/smoke.js'
+import {runSmoke, SMOKE_ENVIRONMENTS} from './src/smoke/smoke.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const HOST = process.env.SMOKE_HOST || '127.0.0.1'
@@ -53,7 +53,6 @@ const server = http.createServer(async (req, res) => {
                     label: env.label,
                     baseUrl: env.baseUrl,
                 })),
-                pages: SMOKE_PAGES,
             })
         }
 
@@ -63,7 +62,7 @@ const server = http.createServer(async (req, res) => {
             const body = await readJson(req)
             running = true
             try {
-                const result = await runSmoke({environment: body.environment, pages: body.pages})
+                const result = await runSmoke({environment: body.environment})
                 return sendJson(res, 200, result)
             } finally {
                 running = false
@@ -84,5 +83,5 @@ const server = http.createServer(async (req, res) => {
 })
 
 server.listen(PORT, HOST, () => {
-    console.log(`Проверка страниц: http://${HOST}:${PORT}`)
+    console.log(`Доступность страниц: http://${HOST}:${PORT}`)
 })

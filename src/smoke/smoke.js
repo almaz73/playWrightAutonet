@@ -6,29 +6,78 @@ export const SMOKE_ENVIRONMENTS = {
     prod: {label: 'Продакшен', baseUrl: 'https://xn--80aej9aped4f.xn--p1ai'},
 }
 
-export const SMOKE_PAGES = [
-    {path: '/', label: 'Главная'},
-    {path: '/cars', label: 'Витрина /cars'},
-]
+// панель из partials/header/header.hbs
+const NAV_SELECTOR = '.main-nav.menu a[href]'
 
-// простая проверка запуска страниц: открывается, отвечает 200, не падает с JS-ошибкой
-export async function runSmoke({environment, pages, timeout = 30000} = {}) {
+// собираем внутренние ссылки из панели: внешние, tel:, mailto: и якоря не проверяем
+async function collectNavLinks(page, baseUrl) {
+    const origin = new URL(baseUrl).origin
+    const links = await page.$$eval(NAV_SELECTOR, (anchors) => anchors.map((anchor) => ({
+        href: anchor.getAttribute('href') || '',
+        label: (anchor.innerText || '').replace(/\s+/g, ' ').trim(),
+    })))
+
+    const pages = []
+    const external = []
+    const seen = new Set()
+
+    for (const {href, label} of links) {
+        if (!href || href.startsWith('#') || /^(tel|mailto|javascript):/i.test(href)) continue
+
+        let url
+        try {
+            url = new URL(href, baseUrl)
+        } catch {
+            continue
+        }
+
+        if (url.origin !== origin) {
+            external.push(label || url.href)
+            continue
+        }
+
+        const path = url.pathname + url.search
+        if (seen.has(path)) continue
+        seen.add(path)
+        pages.push({path, label: label || path})
+    }
+
+    return {pages, external}
+}
+
+// проверка доступности страниц: открывается, отвечает 200, не падает с JS-ошибкой
+export async function runSmoke({environment, timeout = 30000} = {}) {
     const env = SMOKE_ENVIRONMENTS[environment]
     if (!env) throw new Error('Неизвестное окружение')
 
-    const paths = Array.isArray(pages) && pages.length
-        ? pages.filter((path) => SMOKE_PAGES.some((page) => page.path === path))
-        : SMOKE_PAGES.map((page) => page.path)
-    if (!paths.length) throw new Error('Выберите хотя бы одну страницу')
-
+    const baseUrl = env.baseUrl.replace(/\/+$/, '')
     const startedAt = new Date()
     const browser = await chromium.launch()
     const results = []
+    let external = []
 
     try {
-        for (const path of paths) {
-            const label = SMOKE_PAGES.find((page) => page.path === path)?.label || path
-            const url = env.baseUrl + path
+        const navContext = await browser.newContext({locale: 'ru-RU'})
+        const navPage = await navContext.newPage()
+
+        let nav
+        try {
+            const response = await navPage.goto(`${baseUrl}/`, {waitUntil: 'domcontentloaded', timeout})
+            if (response?.status() !== 200) {
+                throw new Error(`главная ответила ${response?.status() ?? 'без статуса'}`)
+            }
+            nav = await collectNavLinks(navPage, baseUrl)
+        } catch (error) {
+            throw new Error(`Не удалось прочитать меню на главной: ${error.message}`)
+        } finally {
+            await navContext.close()
+        }
+
+        external = nav.external
+        if (!nav.pages.length) throw new Error('В панели .main-nav menu не найдено внутренних ссылок')
+
+        for (const {path, label} of nav.pages) {
+            const url = baseUrl + path
             const started = Date.now()
             const context = await browser.newContext({locale: 'ru-RU'})
             const page = await context.newPage()
@@ -73,10 +122,11 @@ export async function runSmoke({environment, pages, timeout = 30000} = {}) {
     return {
         environment,
         label: env.label,
-        baseUrl: env.baseUrl,
+        baseUrl,
         startedAt: startedAt.toISOString(),
         durationMs: Date.now() - startedAt.getTime(),
-        ok: results.every((result) => result.ok),
+        ok: results.length > 0 && results.every((result) => result.ok),
+        skippedExternal: external,
         results,
     }
 }
