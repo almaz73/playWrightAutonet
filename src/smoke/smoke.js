@@ -46,7 +46,7 @@ async function collectNavLinks(page, baseUrl) {
 }
 
 // проверка доступности страниц: открывается, отвечает 200, не падает с JS-ошибкой
-export async function runSmoke({environment, timeout = 30000} = {}) {
+export async function runSmoke({environment, timeout = 30000, onProgress} = {}) {
     const env = SMOKE_ENVIRONMENTS[environment]
     if (!env) throw new Error('Неизвестное окружение')
 
@@ -57,6 +57,8 @@ export async function runSmoke({environment, timeout = 30000} = {}) {
     let external = []
 
     try {
+        onProgress?.({phase: 'discovering', total: 0, done: 0, current: null})
+
         const navContext = await browser.newContext({locale: 'ru-RU'})
         const navPage = await navContext.newPage()
 
@@ -76,7 +78,11 @@ export async function runSmoke({environment, timeout = 30000} = {}) {
         external = nav.external
         if (!nav.pages.length) throw new Error('В панели .main-nav menu не найдено внутренних ссылок')
 
-        for (const {path, label} of nav.pages) {
+        const total = nav.pages.length
+        onProgress?.({phase: 'checking', total, done: 0, current: null})
+
+        for (const [index, {path, label}] of nav.pages.entries()) {
+            onProgress?.({phase: 'checking', total, done: index, current: label})
             const url = baseUrl + path
             const started = Date.now()
             const context = await browser.newContext({locale: 'ru-RU'})
@@ -114,7 +120,10 @@ export async function runSmoke({environment, timeout = 30000} = {}) {
                 pageErrors,
                 durationMs: Date.now() - started,
             })
+            onProgress?.({phase: 'checking', total, done: index + 1, current: label})
         }
+
+        onProgress?.({phase: 'done', total, done: total, current: null})
     } finally {
         await browser.close()
     }

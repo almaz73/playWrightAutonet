@@ -57,12 +57,26 @@
         .badge { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
         .badge.ok { background: #e7f6ec; color: #1e7e40; }
         .badge.fail { background: #fdeaea; color: #b32023; }
-        .result { border-top: 1px solid #ececf0; padding: 14px 0; }
+        .result { border-top: 1px solid #ececf0; padding: 11px 0; }
         .result:last-child { border-bottom: 0; padding-bottom: 0; }
-        .result-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: baseline; }
-        .result-path { font-weight: 600; }
-        .result-url { color: #8a8a95; font-size: 12px; word-break: break-all; }
-        .result-meta { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; color: #555; font-size: 13px; }
+        .result-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+        .result-row .badge { flex: 0 0 70px; text-align: center; }
+        .result-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: #222; text-decoration: none; }
+        .result-path:hover { text-decoration: underline; }
+        .result-url { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #8a8a95; font-size: 12px; }
+        .result-status { flex: 0 0 44px; text-align: right; color: #555; font-size: 13px; font-variant-numeric: tabular-nums; }
+        .result-time { flex: 0 0 76px; text-align: right; color: #555; font-size: 13px; font-variant-numeric: tabular-nums; }
+        .progress-box { display: flex; align-items: center; gap: 12px; }
+        .spinner {
+            width: 18px;
+            height: 18px;
+            flex: 0 0 18px;
+            border: 2px solid #e22427;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin .7s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
         .errors { margin: 8px 0 0; padding: 10px 14px; border-radius: 6px; background: #fff6f6; color: #b32023; font-size: 13px; white-space: pre-wrap; }
         .error-box { margin-top: 14px; padding: 12px 16px; border-radius: 6px; background: #fdeaea; color: #b32023; }
         .empty { color: #8a8a95; }
@@ -92,6 +106,12 @@
 
     <div v-if="error" class="error-box">{{ error }}</div>
 
+    <div v-if="running" class="card progress-box">
+        <span class="spinner"></span>
+        <span>{{ progressText }}</span>
+        <span class="muted" v-if="progress.current">{{ progress.current }}</span>
+    </div>
+
     <div v-if="result" class="card">
         <div class="summary">
             <span class="badge" :class="result.ok ? 'ok' : 'fail'">
@@ -105,15 +125,12 @@
         </div>
 
         <div v-for="item in result.results" :key="item.path" class="result">
-            <div class="result-head">
+            <div class="result-row">
                 <span class="badge" :class="item.ok ? 'ok' : 'fail'">{{ item.ok ? 'OK' : 'Ошибка' }}</span>
-                <span class="result-path">{{ item.label }}</span>
-                <a class="result-url" :href="item.url" target="_blank" rel="noopener">{{ item.url }}</a>
-            </div>
-            <div class="result-meta">
-                <span>Статус: {{ item.status ?? '—' }}</span>
-                <span>Время: {{ item.durationMs }} мс</span>
-                <span v-if="item.title">Заголовок: {{ item.title }}</span>
+                <a class="result-path" :href="item.url" :title="item.url" target="_blank" rel="noopener">{{ item.label }}</a>
+                <span class="result-url">{{ item.path }}</span>
+                <span class="result-status">{{ item.status ?? '—' }}</span>
+                <span class="result-time">{{ item.durationMs }} мс</span>
             </div>
             <div v-if="item.error || item.pageErrors.length" class="errors">
                 <div v-if="item.error">{{ item.error }}</div>

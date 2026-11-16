@@ -15,6 +15,7 @@ const STATIC_FILES = {
 }
 
 let running = false
+let progress = {phase: 'idle', total: 0, done: 0, current: null}
 
 function sendJson(res, status, data) {
     res.writeHead(status, {'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store'})
@@ -46,6 +47,10 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`)
 
     try {
+        if (req.method === 'GET' && url.pathname === '/api/progress') {
+            return sendJson(res, 200, {running, ...progress})
+        }
+
         if (req.method === 'GET' && url.pathname === '/api/options') {
             return sendJson(res, 200, {
                 environments: Object.entries(SMOKE_ENVIRONMENTS).map(([value, env]) => ({
@@ -61,8 +66,14 @@ const server = http.createServer(async (req, res) => {
 
             const body = await readJson(req)
             running = true
+            progress = {phase: 'starting', total: 0, done: 0, current: null}
             try {
-                const result = await runSmoke({environment: body.environment})
+                const result = await runSmoke({
+                    environment: body.environment,
+                    onProgress: (state) => {
+                        progress = state
+                    },
+                })
                 return sendJson(res, 200, result)
             } finally {
                 running = false
