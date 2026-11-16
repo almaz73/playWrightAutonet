@@ -4,6 +4,7 @@ import path from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {runSmoke, SMOKE_ENVIRONMENTS} from './src/smoke/smoke.js'
 import {runFilterTest, runCarsFilterTest} from './src/smoke/filter.js'
+import {runBannerTest} from './src/smoke/banners.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const HOST = process.env.SMOKE_HOST || '127.0.0.1'
@@ -21,6 +22,8 @@ let filterRunning = false
 let filterProgress = {phase: 'idle', total: 0, done: 0, current: null}
 let carsFilterRunning = false
 let carsFilterProgress = {phase: 'idle', total: 0, done: 0, current: null}
+let bannersRunning = false
+let bannersProgress = {phase: 'idle', total: 0, done: 0, current: null}
 
 function sendJson(res, status, data) {
     res.writeHead(status, {'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store'})
@@ -58,6 +61,10 @@ const server = http.createServer(async (req, res) => {
 
         if (req.method === 'GET' && url.pathname === '/api/cars-filter-progress') {
             return sendJson(res, 200, {running: carsFilterRunning, ...carsFilterProgress})
+        }
+
+        if (req.method === 'GET' && url.pathname === '/api/banners-progress') {
+            return sendJson(res, 200, {running: bannersRunning, ...bannersProgress})
         }
 
         if (req.method === 'GET' && url.pathname === '/api/progress') {
@@ -128,6 +135,25 @@ const server = http.createServer(async (req, res) => {
                 return sendJson(res, 200, result)
             } finally {
                 carsFilterRunning = false
+            }
+        }
+
+        if (req.method === 'POST' && url.pathname === '/api/banners-run') {
+            if (bannersRunning) return sendJson(res, 409, {error: 'Проверка баннеров уже выполняется'})
+
+            const body = await readJson(req)
+            bannersRunning = true
+            bannersProgress = {phase: 'starting', total: 0, done: 0, current: null}
+            try {
+                const result = await runBannerTest({
+                    environment: body.environment,
+                    onProgress: (state) => {
+                        bannersProgress = state
+                    },
+                })
+                return sendJson(res, 200, result)
+            } finally {
+                bannersRunning = false
             }
         }
 

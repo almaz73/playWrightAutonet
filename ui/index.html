@@ -75,6 +75,7 @@
         .result-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: #222; text-decoration: none; }
         .result-path:hover { text-decoration: underline; }
         .result-url { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #8a8a95; font-size: 12px; }
+        .result-url--wrap { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; color: #b32023; }
         .result-status { flex: 0 0 44px; text-align: right; color: #555; font-size: 13px; font-variant-numeric: tabular-nums; }
         .result-time { flex: 0 0 76px; text-align: right; color: #555; font-size: 13px; font-variant-numeric: tabular-nums; }
         .progress-box { display: flex; align-items: center; gap: 12px; }
@@ -243,7 +244,51 @@
         </div>
     </div>
 
-    <div v-if="!result && !filterResult && !carsFilterResult && !running && !filterRunning && !carsFilterRunning" class="card empty">
+    <div class="card">
+        <h2>Проверка карусели баннеров</h2>
+        <div class="muted">Playwright открывает главную и /cars, проверяет, что карусель баннеров на своём месте, слайды со ссылками на акции, все фотографии отдаются сервером и их размеры соответствуют типу: _h_b — 1200×410, _h_l — 585×200, _v_l — 278×402, _v_b — 500×723, _h_m — 1201×501.</div>
+        <div class="row" style="margin-top: 16px">
+            <span class="muted" v-if="currentBase">{{ currentBase }}</span>
+            <button :disabled="bannersRunning" @click="runBanners">
+                {{ bannersRunning ? 'Проверяем…' : 'Проверить баннеры' }}
+            </button>
+        </div>
+    </div>
+
+    <div v-if="bannersError" class="error-box">{{ bannersError }}</div>
+
+    <div v-if="bannersRunning" class="card progress-box">
+        <span class="spinner"></span>
+        <span>{{ bannersProgressText }}</span>
+        <span class="muted" v-if="bannersProgress.current">{{ bannersProgress.current }}</span>
+    </div>
+
+    <div v-if="bannersResult" class="card">
+        <div class="summary">
+            <span class="badge" :class="bannersResult.ok ? 'ok' : 'fail'">
+                {{ bannersResult.ok ? 'Карусель работает' : 'Есть проблемы' }}
+            </span>
+            <span class="muted">{{ bannersResult.label }} · {{ bannersResult.baseUrl }}</span>
+            <span class="muted">Шагов: {{ bannersResult.steps.length }}</span>
+            <span class="muted">Длительность: {{ bannersResult.durationMs }} мс</span>
+            <button type="button" class="toggle" @click="bannersDetailsHidden = !bannersDetailsHidden">
+                {{ bannersDetailsHidden ? 'Показать' : 'Скрыть' }}
+            </button>
+        </div>
+
+        <div v-show="!bannersDetailsHidden">
+            <div v-for="(step, index) in bannersResult.steps" :key="index" class="result">
+                <div class="result-row">
+                    <span class="badge" :class="step.ok ? 'ok' : 'fail'">{{ step.ok ? 'OK' : 'Ошибка' }}</span>
+                    <span class="result-path">{{ step.label }}</span>
+                    <span class="result-url" :class="{'result-url--wrap': !step.ok}">{{ step.detail }}</span>
+                    <span class="result-time">{{ step.durationMs }} мс</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div v-if="!result && !filterResult && !carsFilterResult && !bannersResult && !running && !filterRunning && !carsFilterRunning && !bannersRunning" class="card empty">
         Выберите окружение и нажмите «Проверить доступность страниц» — ссылки берутся из меню сайта автоматически.
     </div>
 </div>

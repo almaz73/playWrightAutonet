@@ -22,6 +22,12 @@ createApp({
         const carsFilterProgress = ref({phase: 'idle', total: 0, done: 0, current: null})
         const carsFilterDetailsHidden = ref(false)
         let carsFilterTimer = null
+        const bannersRunning = ref(false)
+        const bannersResult = ref(null)
+        const bannersError = ref('')
+        const bannersProgress = ref({phase: 'idle', total: 0, done: 0, current: null})
+        const bannersDetailsHidden = ref(false)
+        let bannersTimer = null
 
         const currentBase = computed(() => environments.value.find((env) => env.value === environment.value)?.baseUrl || '')
         const canRun = computed(() => !running.value)
@@ -42,6 +48,12 @@ createApp({
             if (state.phase === 'starting') return 'Запускаем проверку фильтра на /cars…'
             if (state.total) return `Шаг ${Math.min(state.done + 1, state.total)} из ${state.total}`
             return 'Проверяем фильтр на /cars…'
+        })
+        const bannersProgressText = computed(() => {
+            const state = bannersProgress.value
+            if (state.phase === 'starting') return 'Запускаем проверку баннеров…'
+            if (state.total) return `Шаг ${Math.min(state.done + 1, state.total)} из ${state.total}`
+            return 'Проверяем баннеры…'
         })
 
         const formatDate = (value) => new Date(value).toLocaleString('ru-RU')
@@ -68,6 +80,15 @@ createApp({
             try {
                 const response = await fetch('/api/cars-filter-progress', {cache: 'no-store'})
                 if (response.ok) carsFilterProgress.value = await response.json()
+            } catch {
+                // следующий опрос повторит запрос
+            }
+        }
+
+        const pollBannersProgress = async () => {
+            try {
+                const response = await fetch('/api/banners-progress', {cache: 'no-store'})
+                if (response.ok) bannersProgress.value = await response.json()
             } catch {
                 // следующий опрос повторит запрос
             }
@@ -157,6 +178,32 @@ createApp({
             }
         }
 
+        const runBanners = async () => {
+            bannersRunning.value = true
+            bannersError.value = ''
+            bannersResult.value = null
+            bannersDetailsHidden.value = false
+            bannersProgress.value = {phase: 'starting', total: 0, done: 0, current: null}
+            bannersTimer = setInterval(pollBannersProgress, 500)
+            pollBannersProgress()
+            try {
+                const response = await fetch('/api/banners-run', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({environment: environment.value}),
+                })
+                const data = await response.json()
+                if (!response.ok) throw new Error(data.error || 'Не удалось запустить проверку')
+                bannersResult.value = data
+            } catch (runError) {
+                bannersError.value = runError.message
+            } finally {
+                clearInterval(bannersTimer)
+                bannersTimer = null
+                bannersRunning.value = false
+            }
+        }
+
         return {
             environments,
             environment,
@@ -178,12 +225,19 @@ createApp({
             carsFilterProgress,
             carsFilterDetailsHidden,
             carsFilterProgressText,
+            bannersRunning,
+            bannersResult,
+            bannersError,
+            bannersProgress,
+            bannersDetailsHidden,
+            bannersProgressText,
             currentBase,
             canRun,
             formatDate,
             run,
             runFilter,
             runCarsFilter,
+            runBanners,
         }
     },
 }).mount('#app')
