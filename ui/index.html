@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Проверка страниц — Autonet</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            background: #f4f4f6;
+            color: #222;
+            font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        }
+        .wrap { max-width: 860px; margin: 0 auto; padding: 32px 20px 60px; }
+        h1 { margin: 0 0 6px; font-size: 24px; }
+        .muted { color: #8a8a95; font-size: 13px; }
+        .card {
+            background: #fff;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 18px;
+            box-shadow: 0 1px 6px rgba(137, 138, 154, .25);
+        }
+        .row { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; justify-content: space-between; }
+        .group { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        .group-title { width: 100%; margin-bottom: 2px; font-size: 12px; font-weight: 600; color: #8a8a95; text-transform: uppercase; letter-spacing: .04em; }
+        label.option {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 12px;
+            border: 1px solid #dcdce2;
+            border-radius: 999px;
+            cursor: pointer;
+            user-select: none;
+            background: #fff;
+        }
+        label.option:has(input:checked) {
+            border-color: #e22427;
+            color: #e22427;
+            background: #fdf1f1;
+        }
+        label.option input { accent-color: #e22427; }
+        button {
+            padding: 10px 22px;
+            border: 0;
+            border-radius: 6px;
+            background: #e22427;
+            color: #fff;
+            font: inherit;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        button:disabled { opacity: .55; cursor: not-allowed; }
+        .summary { display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: center; margin-bottom: 14px; }
+        .badge { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+        .badge.ok { background: #e7f6ec; color: #1e7e40; }
+        .badge.fail { background: #fdeaea; color: #b32023; }
+        .result { border-top: 1px solid #ececf0; padding: 14px 0; }
+        .result:last-child { border-bottom: 0; padding-bottom: 0; }
+        .result-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: baseline; }
+        .result-path { font-weight: 600; }
+        .result-url { color: #8a8a95; font-size: 12px; word-break: break-all; }
+        .result-meta { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; color: #555; font-size: 13px; }
+        .errors { margin: 8px 0 0; padding: 10px 14px; border-radius: 6px; background: #fff6f6; color: #b32023; font-size: 13px; white-space: pre-wrap; }
+        .error-box { margin-top: 14px; padding: 12px 16px; border-radius: 6px; background: #fdeaea; color: #b32023; }
+        .empty { color: #8a8a95; }
+    </style>
+</head>
+<body>
+<div id="app" class="wrap">
+    <h1>Проверка страниц Autonet</h1>
+    <div class="muted">Playwright открывает страницы в headless-браузере и проверяет, что они отвечают 200 без ошибок JS.</div>
+
+    <div class="card">
+        <div class="group">
+            <span class="group-title">Окружение</span>
+            <label v-for="env in environments" :key="env.value" class="option">
+                <input type="radio" name="environment" :value="env.value" v-model="environment">
+                {{ env.label }}
+            </label>
+        </div>
+
+        <div class="group" style="margin-top: 16px">
+            <span class="group-title">Страницы</span>
+            <label v-for="page in pages" :key="page.path" class="option">
+                <input type="checkbox" :value="page.path" v-model="selected">
+                {{ page.label }} <span class="muted">{{ page.path }}</span>
+            </label>
+        </div>
+
+        <div class="row" style="margin-top: 20px">
+            <span class="muted" v-if="currentBase">{{ currentBase }}</span>
+            <button :disabled="!canRun" @click="run">
+                {{ running ? 'Проверяем…' : 'Запустить проверку' }}
+            </button>
+        </div>
+    </div>
+
+    <div v-if="error" class="error-box">{{ error }}</div>
+
+    <div v-if="result" class="card">
+        <div class="summary">
+            <span class="badge" :class="result.ok ? 'ok' : 'fail'">
+                {{ result.ok ? 'Все страницы в порядке' : 'Есть проблемы' }}
+            </span>
+            <span class="muted">{{ result.label }} · {{ result.baseUrl }}</span>
+            <span class="muted">Длительность: {{ result.durationMs }} мс</span>
+            <span class="muted">{{ formatDate(result.startedAt) }}</span>
+        </div>
+
+        <div v-for="item in result.results" :key="item.path" class="result">
+            <div class="result-head">
+                <span class="badge" :class="item.ok ? 'ok' : 'fail'">{{ item.ok ? 'OK' : 'Ошибка' }}</span>
+                <span class="result-path">{{ item.label }}</span>
+                <a class="result-url" :href="item.url" target="_blank" rel="noopener">{{ item.url }}</a>
+            </div>
+            <div class="result-meta">
+                <span>Статус: {{ item.status ?? '—' }}</span>
+                <span>Время: {{ item.durationMs }} мс</span>
+                <span v-if="item.title">Заголовок: {{ item.title }}</span>
+            </div>
+            <div v-if="item.error || item.pageErrors.length" class="errors">
+                <div v-if="item.error">{{ item.error }}</div>
+                <div v-for="(message, index) in item.pageErrors" :key="index">JS: {{ message }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div v-if="!result && !running" class="card empty">
+        Выберите окружение и страницы, затем нажмите «Запустить проверку».
+    </div>
+</div>
+<script type="module" src="/app.js"></script>
+</body>
+</html>
