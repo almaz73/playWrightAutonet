@@ -14,6 +14,7 @@
         }
         .wrap { max-width: 860px; margin: 0 auto; padding: 32px 20px 60px; }
         h1 { margin: 0 0 6px; font-size: 24px; }
+        h2 { margin: 0 0 6px; font-size: 18px; }
         .muted { color: #8a8a95; font-size: 13px; }
         .card {
             background: #fff;
@@ -54,6 +55,16 @@
         }
         button:disabled { opacity: .55; cursor: not-allowed; }
         .summary { display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: center; margin-bottom: 14px; }
+        .summary .toggle {
+            margin-left: auto;
+            padding: 5px 14px;
+            font-size: 13px;
+            font-weight: 500;
+            background: #fff;
+            color: #555;
+            border: 1px solid #dcdce2;
+        }
+        .summary .toggle:hover { border-color: #b9b9c3; color: #222; }
         .badge { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
         .badge.ok { background: #e7f6ec; color: #1e7e40; }
         .badge.fail { background: #fdeaea; color: #b32023; }
@@ -99,7 +110,7 @@
         <div class="row" style="margin-top: 20px">
             <span class="muted" v-if="currentBase">{{ currentBase }}</span>
             <button :disabled="!canRun" @click="run">
-                {{ running ? 'Проверяем…' : 'Проверить доступность' }}
+                {{ running ? 'Проверяем…' : 'Проверить доступность страниц' }}
             </button>
         </div>
     </div>
@@ -122,25 +133,118 @@
             <span class="muted" v-if="result.skippedExternal.length">Внешних ссылок пропущено: {{ result.skippedExternal.length }}</span>
             <span class="muted">Длительность: {{ result.durationMs }} мс</span>
             <span class="muted">{{ formatDate(result.startedAt) }}</span>
+            <button type="button" class="toggle" @click="detailsHidden = !detailsHidden">
+                {{ detailsHidden ? 'Показать' : 'Скрыть' }}
+            </button>
         </div>
 
-        <div v-for="item in result.results" :key="item.path" class="result">
-            <div class="result-row">
-                <span class="badge" :class="item.ok ? 'ok' : 'fail'">{{ item.ok ? 'OK' : 'Ошибка' }}</span>
-                <a class="result-path" :href="item.url" :title="item.url" target="_blank" rel="noopener">{{ item.label }}</a>
-                <span class="result-url">{{ item.path }}</span>
-                <span class="result-status">{{ item.status ?? '—' }}</span>
-                <span class="result-time">{{ item.durationMs }} мс</span>
-            </div>
-            <div v-if="item.error || item.pageErrors.length" class="errors">
-                <div v-if="item.error">{{ item.error }}</div>
-                <div v-for="(message, index) in item.pageErrors" :key="index">JS: {{ message }}</div>
+        <div v-show="!detailsHidden">
+            <div v-for="item in result.results" :key="item.path" class="result">
+                <div class="result-row">
+                    <span class="badge" :class="item.ok ? 'ok' : 'fail'">{{ item.ok ? 'OK' : 'Ошибка' }}</span>
+                    <a class="result-path" :href="item.url" :title="item.url" target="_blank" rel="noopener">{{ item.label }}</a>
+                    <span class="result-url">{{ item.path }}</span>
+                    <span class="result-status">{{ item.status ?? '—' }}</span>
+                    <span class="result-time">{{ item.durationMs }} мс</span>
+                </div>
+                <div v-if="item.error || item.pageErrors.length" class="errors">
+                    <div v-if="item.error">{{ item.error }}</div>
+                    <div v-for="(message, index) in item.pageErrors" :key="index">JS: {{ message }}</div>
+                </div>
             </div>
         </div>
     </div>
 
-    <div v-if="!result && !running" class="card empty">
-        Выберите окружение и нажмите «Проверить доступность» — ссылки берутся из меню сайта автоматически.
+    <div class="card">
+        <h2>Проверка работы фильтра на главной странице</h2>
+        <div class="muted">Playwright раскрывает расширенный фильтр на главной, выбирает марку, город, год от 2015 и руль, проверяет обновление счётчика найденных авто и переход на отфильтрованную витрину.</div>
+        <div class="row" style="margin-top: 16px">
+            <span class="muted" v-if="currentBase">{{ currentBase }}</span>
+            <button :disabled="filterRunning" @click="runFilter">
+                {{ filterRunning ? 'Проверяем…' : 'Проверить фильтр' }}
+            </button>
+        </div>
+    </div>
+
+    <div v-if="filterError" class="error-box">{{ filterError }}</div>
+
+    <div v-if="filterRunning" class="card progress-box">
+        <span class="spinner"></span>
+        <span>{{ filterProgressText }}</span>
+        <span class="muted" v-if="filterProgress.current">{{ filterProgress.current }}</span>
+    </div>
+
+    <div v-if="filterResult" class="card">
+        <div class="summary">
+            <span class="badge" :class="filterResult.ok ? 'ok' : 'fail'">
+                {{ filterResult.ok ? 'Фильтр работает' : 'Есть проблемы' }}
+            </span>
+            <span class="muted">{{ filterResult.label }} · {{ filterResult.baseUrl }}</span>
+            <span class="muted">Шагов: {{ filterResult.steps.length }}</span>
+            <span class="muted">Длительность: {{ filterResult.durationMs }} мс</span>
+            <button type="button" class="toggle" @click="filterDetailsHidden = !filterDetailsHidden">
+                {{ filterDetailsHidden ? 'Показать' : 'Скрыть' }}
+            </button>
+        </div>
+
+        <div v-show="!filterDetailsHidden">
+            <div v-for="(step, index) in filterResult.steps" :key="index" class="result">
+                <div class="result-row">
+                    <span class="badge" :class="step.ok ? 'ok' : 'fail'">{{ step.ok ? 'OK' : 'Ошибка' }}</span>
+                    <span class="result-path">{{ step.label }}</span>
+                    <span class="result-url">{{ step.detail }}</span>
+                    <span class="result-time">{{ step.durationMs }} мс</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Проверка работы фильтра на странице /cars</h2>
+        <div class="muted">Playwright открывает каталог /cars, раскрывает расширенный фильтр, выбирает марку, город, год от 2015 и руль, проверяет обновление счётчика и витрины без перезагрузки и переход на отфильтрованный адрес.</div>
+        <div class="row" style="margin-top: 16px">
+            <span class="muted" v-if="currentBase">{{ currentBase }}</span>
+            <button :disabled="carsFilterRunning" @click="runCarsFilter">
+                {{ carsFilterRunning ? 'Проверяем…' : 'Проверить фильтр на /cars' }}
+            </button>
+        </div>
+    </div>
+
+    <div v-if="carsFilterError" class="error-box">{{ carsFilterError }}</div>
+
+    <div v-if="carsFilterRunning" class="card progress-box">
+        <span class="spinner"></span>
+        <span>{{ carsFilterProgressText }}</span>
+        <span class="muted" v-if="carsFilterProgress.current">{{ carsFilterProgress.current }}</span>
+    </div>
+
+    <div v-if="carsFilterResult" class="card">
+        <div class="summary">
+            <span class="badge" :class="carsFilterResult.ok ? 'ok' : 'fail'">
+                {{ carsFilterResult.ok ? 'Фильтр работает' : 'Есть проблемы' }}
+            </span>
+            <span class="muted">{{ carsFilterResult.label }} · {{ carsFilterResult.baseUrl }}</span>
+            <span class="muted">Шагов: {{ carsFilterResult.steps.length }}</span>
+            <span class="muted">Длительность: {{ carsFilterResult.durationMs }} мс</span>
+            <button type="button" class="toggle" @click="carsFilterDetailsHidden = !carsFilterDetailsHidden">
+                {{ carsFilterDetailsHidden ? 'Показать' : 'Скрыть' }}
+            </button>
+        </div>
+
+        <div v-show="!carsFilterDetailsHidden">
+            <div v-for="(step, index) in carsFilterResult.steps" :key="index" class="result">
+                <div class="result-row">
+                    <span class="badge" :class="step.ok ? 'ok' : 'fail'">{{ step.ok ? 'OK' : 'Ошибка' }}</span>
+                    <span class="result-path">{{ step.label }}</span>
+                    <span class="result-url">{{ step.detail }}</span>
+                    <span class="result-time">{{ step.durationMs }} мс</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div v-if="!result && !filterResult && !carsFilterResult && !running && !filterRunning && !carsFilterRunning" class="card empty">
+        Выберите окружение и нажмите «Проверить доступность страниц» — ссылки берутся из меню сайта автоматически.
     </div>
 </div>
 <script type="module" src="/app.js"></script>

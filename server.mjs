@@ -3,6 +3,7 @@ import {readFile} from 'node:fs/promises'
 import path from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {runSmoke, SMOKE_ENVIRONMENTS} from './src/smoke/smoke.js'
+import {runFilterTest, runCarsFilterTest} from './src/smoke/filter.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const HOST = process.env.SMOKE_HOST || '127.0.0.1'
@@ -16,6 +17,10 @@ const STATIC_FILES = {
 
 let running = false
 let progress = {phase: 'idle', total: 0, done: 0, current: null}
+let filterRunning = false
+let filterProgress = {phase: 'idle', total: 0, done: 0, current: null}
+let carsFilterRunning = false
+let carsFilterProgress = {phase: 'idle', total: 0, done: 0, current: null}
 
 function sendJson(res, status, data) {
     res.writeHead(status, {'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store'})
@@ -47,6 +52,14 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`)
 
     try {
+        if (req.method === 'GET' && url.pathname === '/api/filter-progress') {
+            return sendJson(res, 200, {running: filterRunning, ...filterProgress})
+        }
+
+        if (req.method === 'GET' && url.pathname === '/api/cars-filter-progress') {
+            return sendJson(res, 200, {running: carsFilterRunning, ...carsFilterProgress})
+        }
+
         if (req.method === 'GET' && url.pathname === '/api/progress') {
             return sendJson(res, 200, {running, ...progress})
         }
@@ -77,6 +90,44 @@ const server = http.createServer(async (req, res) => {
                 return sendJson(res, 200, result)
             } finally {
                 running = false
+            }
+        }
+
+        if (req.method === 'POST' && url.pathname === '/api/filter-run') {
+            if (filterRunning) return sendJson(res, 409, {error: 'Проверка фильтра уже выполняется'})
+
+            const body = await readJson(req)
+            filterRunning = true
+            filterProgress = {phase: 'starting', total: 0, done: 0, current: null}
+            try {
+                const result = await runFilterTest({
+                    environment: body.environment,
+                    onProgress: (state) => {
+                        filterProgress = state
+                    },
+                })
+                return sendJson(res, 200, result)
+            } finally {
+                filterRunning = false
+            }
+        }
+
+        if (req.method === 'POST' && url.pathname === '/api/cars-filter-run') {
+            if (carsFilterRunning) return sendJson(res, 409, {error: 'Проверка фильтра /cars уже выполняется'})
+
+            const body = await readJson(req)
+            carsFilterRunning = true
+            carsFilterProgress = {phase: 'starting', total: 0, done: 0, current: null}
+            try {
+                const result = await runCarsFilterTest({
+                    environment: body.environment,
+                    onProgress: (state) => {
+                        carsFilterProgress = state
+                    },
+                })
+                return sendJson(res, 200, result)
+            } finally {
+                carsFilterRunning = false
             }
         }
 
